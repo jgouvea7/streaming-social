@@ -44,7 +44,6 @@ export class VideosController {
   }
 
   @Get()
-  @UseGuards(AuthGuard)
   findAll() {
     return this.videosService.findAll();
   }

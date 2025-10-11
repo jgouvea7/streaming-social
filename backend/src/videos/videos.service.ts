@@ -5,6 +5,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Video } from './entities/video.entity';
 import { Repository } from 'typeorm';
 import { UsersService } from 'src/users/users.service';
+import { rejects } from 'assert';
+import { spawn } from 'child_process';
 
 
 @Injectable()
@@ -40,10 +42,46 @@ export class VideosService {
   }
 
 
-  findAll() {
-    return this.videoRepository.find();
+  async findAll() {
+    const videos = await this.videoRepository.find();
+
+    const recommendation = await this.executeRecommendation(videos);
+    return recommendation;
   }
 
+
+  private executeRecommendation(videos: any[]): Promise<any[]> {
+    return new Promise((resolve, reject) => {
+      const process = spawn('python', ['algorithms/recommendation.py']);
+
+      let data = '';
+      let error = '';
+
+      process.stdin.write(JSON.stringify(videos));
+      process.stdin.end()
+
+      process.stdout.on('data', (chunk) => {
+        data += chunk.toString();
+      })
+
+      process.stderr.on('data', (chunk) => {
+        error += chunk.toString()
+      })
+
+      process.on('close', (code) => {
+        if (code !== 0) {
+          reject(error || 'Erro ao executar algoritmo');
+        } else {
+          try {
+            const result = JSON.parse(data);
+            resolve(result);
+          } catch (e) {
+            reject('Erro ao converter resposta do Python')
+          }
+        }
+      })
+    })
+  }
 
   async findVideoByID(videoID: string) {
     const video = await this.videoRepository.findOneBy({ id: videoID });
@@ -78,7 +116,7 @@ export class VideosService {
   }
 
 
-  async updateLikeVideo(videoID: string, userID: string, updateVideoDto: UpdateVideoDto) {
+  async updateLikeVideo(videoID: string, updateVideoDto: UpdateVideoDto) {
     const video = await this.videoRepository.findOneBy({ id: videoID });
 
     if (!video) {
